@@ -2,7 +2,7 @@ var App = {
 	ajax: function(config) {
 		var fileProtocol = 'file://';
 		if (config.url.substr(0, fileProtocol.length) == fileProtocol) {
-			chrome.extension.sendRequest({
+			chrome.runtime.sendMessage({
 				command: 'ajax',
 				url: config.url,
 				type: config.method,
@@ -10,11 +10,10 @@ var App = {
 				data: config.data,
 				headers: config.headers,
 			}, function(result) {
-				if (config[result.type]) {
+				if (result && config[result.type]) {
 					if (result.type == 'success' && config.dataType == 'xml') {
 						result.args[0] = new DOMParser().parseFromString(result.args[0], 'text/xml');
 					}
-					console.log(config, result);
 					config[result.type].apply(null, result.args);
 				}
 			});

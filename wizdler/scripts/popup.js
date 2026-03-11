@@ -1,4 +1,4 @@
-// popup.js — MV3-ready
+﻿// popup.js — MV3-ready
 
 var App = {
   url: null,

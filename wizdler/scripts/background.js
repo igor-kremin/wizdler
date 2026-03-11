@@ -1,4 +1,4 @@
-// scripts/background.js  (MV3 service worker)
+﻿// scripts/background.js  (MV3 service worker)
 
 chrome.runtime.onInstalled.addListener(() => {
   // Можна додати ініціалізацію правил/стану тут за потреби

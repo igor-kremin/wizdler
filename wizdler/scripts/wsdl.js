@@ -69,7 +69,7 @@ Wsdl._generateSoapMessage = function(ctx, soapVersion) {
 		for (var i = 0, n = headers.length; i < n; ++i) {
 			var message = ctx.wsdl.messages[headers[i].message.full];
 			var el = ctx.wsdl.generator.writeXml(message.parts[0].element).documentElement;
-			hdr.appendChild(doc.importNode(el));
+			hdr.appendChild(doc.importNode(el, true));
 		}
 	}
 
@@ -95,7 +95,7 @@ Wsdl._generateSoapMessage = function(ctx, soapVersion) {
 			var part = message.parts[i];
 			if (part.name == body.parts) {
 				var el = ctx.wsdl.generator.writeXml(part.element).documentElement;
-				bodyEl.appendChild(doc.importNode(el));
+				bodyEl.appendChild(doc.importNode(el, true));
 			}
 		}
 	}
@@ -227,8 +227,10 @@ Wsdl.prototype = {
 	_ajax: function(options, callback) {
 		var url = options.url;
 		var resources = this.resources;
-		if (resources.hasOwnProperty(url))
+		if (resources.hasOwnProperty(url)) {
 			callback(null, resources[url]);
+			return;
+		}
 		var me = this;
 		$.ajax($.extend(options, {
 			success: function(data) {
