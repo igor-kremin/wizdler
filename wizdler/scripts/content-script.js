@@ -7,6 +7,7 @@
   };
 
   var xmlContent = getXmlContent();
+  var isWsdl = false;
 
   if (xmlContent) {
     var parser = new DOMParser();
@@ -14,17 +15,17 @@
     var root = doc.documentElement;
 
     if (root && root.namespaceURI === ns.wsdl && root.localName === 'definitions') {
-      // Попросити background "увімкнути" дію (аналог pageAction у MV2)
-      try {
-        chrome.runtime.sendMessage({ command: 'showAction' });
-      } catch (e) {
-        // Якщо щось не так із chrome.runtime (рідко, але хай буде безпечно)
-        console.warn('chrome.runtime недоступний або заблокований:', e);
-      }
+      isWsdl = true;
 
       // Позначка для popup.js (якщо він перевіряє через executeScript)
       try { window.__WIZDLER_WSDL__ = true; } catch (_) {}
     }
+  }
+
+  try {
+    chrome.runtime.sendMessage({ command: isWsdl ? 'showAction' : 'hideAction' });
+  } catch (e) {
+    console.warn('chrome.runtime недоступний або заблокований:', e);
   }
 
   // ---- message handler (аналог onRequest у MV2) ----
@@ -40,10 +41,13 @@
         break;
 
       case 'download':
-        if (request.name && request.data) {
+        try {
+          if (!request.name || !request.data) throw new Error('Missing download name or data.');
           downloadFile(request.name, request.data);
+          sendResponse && sendResponse({ ok: true });
+        } catch (error) {
+          sendResponse && sendResponse({ error: error.message || String(error) });
         }
-        sendResponse && sendResponse();
         break;
 
       default:
@@ -81,16 +85,9 @@
   }
 
   function downloadFile(name, dataUrlOrHref) {
-    try {
-      var a = document.createElementNS(ns.xhtml, 'a');
-      a.download = name;
-      a.href = dataUrlOrHref; // data:..., blob:..., або звичайний URL
-      // ініціюємо клік
-      var ev = document.createEvent('MouseEvents');
-      ev.initEvent('click', true, true);
-      a.dispatchEvent(ev);
-    } catch (e) {
-      console.warn('downloadFile error:', e);
-    }
+    var a = document.createElementNS(ns.xhtml, 'a');
+    a.download = name;
+    a.href = dataUrlOrHref;
+    a.click();
   }
 })();

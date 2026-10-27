@@ -7,6 +7,8 @@ function Wsdl(url, text) {
 	this.bindings = new Object;
 	this.services = new Array;
 	this.imports = new Array;
+	this.importErrors = new Array;
+	this._schemaCallbacks = new Array;
 
 	this.resources = new Object;
 	this.resources[url] = text;
@@ -29,20 +31,23 @@ Wsdl._getDirectory = function(url) {
 };
 
 Wsdl._combineURL = function(baseURL, url) {
-	// if url is absolute, do nothing
-	if (/^(?:https?|file):\/\/|^\//.test(url))
-		return url;
-	// otherwise return combined url
-	return baseURL + '/' + url.replace(/^\//, '');
+	try {
+		return new URL(url, baseURL).href;
+	} catch (error) {
+		if (/^(?:https?|file):\/\/|^\//.test(url))
+			return url;
+		return baseURL + '/' + url.replace(/^\//, '');
+	}
 };
 
 // Parses WSDL.
 Wsdl.parse = function(url, text, loadSchema, callback, scope) {
 	var wsdl = new Wsdl(url, text);
 	wsdl._parseWSDL(url, function() {
-		if (!loadSchema)
-			wsdl._loaded = true;
-		wsdl._parseSchema(url, callback, scope, [wsdl]);
+		if (loadSchema)
+			wsdl._parseSchema(url, callback, scope, [wsdl]);
+		else
+			wsdl._apply(callback, scope, [wsdl]);
 	}, scope);
 	return wsdl;
 };
@@ -274,31 +279,43 @@ Wsdl.prototype = {
 		return schemas;
 	},
 	
-	_getImports: function() {
-		// shortcuts
-		var ns = Wsdl.ns;
-		var attr = Wsdl._attr;
+	_getSchemaReferences: function(schema, inheritedNamespace) {
 		var children = Wsdl._children;
-		var child = Wsdl._child;
-		
+		var attr = Wsdl._attr;
 		var result = new Array;
-		var push = Array.prototype.push;
+		var schemaNamespace = attr(schema, 'targetNamespace') || inheritedNamespace || '';
+		var kinds = ['import', 'include', 'redefine'];
+		for (var i = 0; i < kinds.length; ++i) {
+			var kind = kinds[i];
+			var elements = children(schema, Wsdl.ns.schema, kind);
+			for (var j = 0; j < elements.length; ++j) {
+				result.push({
+					element: elements[j],
+					kind: kind,
+					namespace: kind == 'import' ? attr(elements[j], 'namespace') : schemaNamespace
+				});
+			}
+		}
+		return result;
+	},
 
+	_getImports: function() {
 		var xml = this._getXML();
-		var types = child(xml.documentElement, ns.wsdl, 'types');
-		var schema = child(types, ns.schema, 'schema');
-		var xml = this._getXML();
-
-		if (schema)
-			push.apply(result, $(children(schema, Wsdl.ns.schema, 'import')));
-
+		var types = Wsdl._child(xml.documentElement, Wsdl.ns.wsdl, 'types');
+		var schemas = Wsdl._children(types, Wsdl.ns.schema, 'schema');
+		var result = new Array;
+		for (var i = 0; i < schemas.length; ++i) {
+			var namespace = Wsdl._attr(schemas[i], 'targetNamespace');
+			Array.prototype.push.apply(result, this._getSchemaReferences(schemas[i], namespace));
+		}
 		return result;
 	},
 	
 	// Resolves import. Overrride this to cache imports or to modify URL.
 	_resolveImport: function(baseURL, location, ns, callback) {
+		location = location ? location.trim() : '';
 		if (!location) {
-			callback(new Error('Missing location.'));
+			callback(null);
 			return;
 		}
 		var url = Wsdl._combineURL(baseURL, location);
@@ -306,39 +323,87 @@ Wsdl.prototype = {
 			url: url,
 			dataType: 'text'
 		}, function(err, data) {
-			callback(err, {
+			if (err) {
+				callback(err);
+				return;
+			}
+			var xml = new DOMParser().parseFromString(data, 'text/xml');
+			if (!xml.documentElement || xml.documentElement.localName != 'schema' || xml.documentElement.namespaceURI != Wsdl.ns.schema) {
+				callback(new Error('Invalid XSD schema loaded from url: ' + url));
+				return;
+			}
+			callback(null, {
 				location: url,
 				ns: ns,
 				text: data,
-				XML: new DOMParser().parseFromString(data, 'text/xml')
+				XML: xml
 			});
 		});
 	},
 
-	// Resolves all imports in the schema.
-	_resolveImports: function(baseURL, imports, callback) {
+	_resolveImports: function(baseURL, references, callback) {
 		var result = new Array;
-
-		// there are no imports to resolve		
-		if (!imports.length) {
-			callback(result);
-			return;
-		}
-
-		var count = 0;
-		var parser = new DOMParser;
-		var done = function(err, imported) {
-			if (imported)
-				result.push(imported);
-			if (++count == imports.length)
-				callback(result);
-		};
+		var errors = new Array;
+		var queue = new Array;
+		var seen = Object.create(null);
 		var me = this;
-		for (var i = 0, n = imports.length; i < n; ++i) {
-			var loc = imports[i].getAttributeNS(null, 'schemaLocation');
-			var ns = imports[i].getAttributeNS(null, 'namespace')
-			me._resolveImport(baseURL, loc, ns, done);
+
+		function enqueue(items, sourceURL) {
+			for (var i = 0; i < items.length; ++i) {
+				var reference = items[i];
+				var element = reference.element || reference;
+				var location = Wsdl._attr(element, 'schemaLocation');
+				var kind = reference.kind || 'import';
+				if (!location || !location.trim()) {
+					if (kind != 'import')
+						errors.push(new Error('Missing schemaLocation for xs:' + kind + '.'));
+					continue;
+				}
+				location = location.trim();
+				var namespace = reference.namespace;
+				if (namespace == null)
+					namespace = Wsdl._attr(element, 'namespace');
+				var url = Wsdl._combineURL(sourceURL, location);
+				var key = url + '\n' + namespace;
+				if (seen[key]) continue;
+				seen[key] = true;
+				queue.push({ baseURL: sourceURL, location: location, namespace: namespace, url: url });
+			}
 		}
+
+		function next() {
+			if (!queue.length) {
+				callback(result, errors);
+				return;
+			}
+			var item = queue.shift();
+			var completed = false;
+			function done(err, imported) {
+				if (completed) return;
+				completed = true;
+				if (err) {
+					errors.push(err);
+				} else if (imported) {
+					imported.location = imported.location || item.url;
+					imported.namespace = item.namespace;
+					result.push(imported);
+					var schema = imported.XML && imported.XML.documentElement;
+					if (schema) {
+						var namespace = Wsdl._attr(schema, 'targetNamespace') || item.namespace;
+						enqueue(me._getSchemaReferences(schema, namespace), imported.location);
+					}
+				}
+				setTimeout(next, 0);
+			}
+			try {
+				me._resolveImport(item.baseURL, item.location, item.namespace, done);
+			} catch (error) {
+				done(error);
+			}
+		}
+
+		enqueue(references, baseURL);
+		next();
 	},
 
 	// Parses the schema from the WSDL.	
@@ -351,18 +416,27 @@ Wsdl.prototype = {
 			return;
 		}
 
-		// mark as loaded
-		this._loaded = true;
+		if (callback)
+			this._schemaCallbacks.push({ callback: callback, scope: scope, args: args });
+		if (this._loading)
+			return;
+		this._loading = true;
 
 		// resolve imports
 		var me = this;
 		var schemas = this._getSchemas();
 		var imports = this._getImports();
 
-		this._resolveImports(Wsdl._getDirectory(url), imports, function(imports) {
+		this._resolveImports(url, imports, function(imports, errors) {
 			Array.prototype.push.apply(me.imports, imports);
+			me.importErrors = errors;
 			me.generator = new XmlSampleGenerator(me.targetNamespace, schemas, imports);
-			me._apply(callback, scope, args);
+			me._loaded = true;
+			me._loading = false;
+			var callbacks = me._schemaCallbacks;
+			me._schemaCallbacks = new Array;
+			for (var i = 0, n = callbacks.length; i < n; ++i)
+				me._apply(callbacks[i].callback, callbacks[i].scope, callbacks[i].args);
 		});
 	},
 

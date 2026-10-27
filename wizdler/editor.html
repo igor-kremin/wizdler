@@ -1,52 +1,102 @@
 <!DOCTYPE html>
-<html class="bootstrap"><head>
+<html lang="en"><head>
 	<meta charset="utf-8" />
-	<title>Editor</title>
-	<link rel="stylesheet" href="stylesheets/bootstrap.css" />
-	<link rel="stylesheet" href="stylesheets/bootstrap-responsive.css" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Wizdler SOAP editor</title>
 	<link rel="stylesheet" href="stylesheets/editor.css" />
 </head><body>
-	<div class="subnav address-bar">
-		<select id="method">
-			<option>POST</option>
-			<option>GET</option>
-			<option>PUT</option>
-			<option>PATCH</option>
-			<option>DELETE</option>
-			<option>OPTIONS</option>
-		</select>
-		<div class="input-append dropdown">
-			<input type="text" id="address" spellcheck="false" autocorrect="off" size="80" />
-			<input id="go" type="button" value="Go" class="btn" />
-			<span class="btn dropdown-toggle" data-toggle="x-dropdown"><span class="caret"></span></span>
-			<ul class="dropdown-menu">
-				<li><a href="#exit"><i class="icon-off"></i> Exit</a></li>
-			</ul>
-		</div>
+	<div class="app-shell">
+		<header class="app-header">
+			<div class="operation-context">
+				<p class="eyebrow">Wizdler <span>/ SOAP editor</span></p>
+				<h1 id="operation-name">SOAP request</h1>
+				<p id="service-context" class="service-context">Select an operation from the Wizdler popup to begin.</p>
+			</div>
+			<button id="exit" class="button button-quiet" type="button">Close editor</button>
+		</header>
+		<main class="editor-main">
+			<section class="request-controls" aria-label="Request settings">
+				<form id="request-form" class="address-bar" aria-describedby="send-help">
+					<div class="field method-field">
+						<label for="method">Method</label>
+						<select id="method" disabled>
+							<option>POST</option>
+							<option>GET</option>
+							<option>PUT</option>
+							<option>PATCH</option>
+							<option>DELETE</option>
+							<option>HEAD</option>
+							<option>OPTIONS</option>
+						</select>
+					</div>
+					<div class="field endpoint-field">
+						<label for="address">Endpoint</label>
+						<input type="text" id="address" placeholder="Service endpoint URL" spellcheck="false" autocomplete="off" disabled />
+					</div>
+					<button id="go" class="button button-primary" type="submit" aria-keyshortcuts="Control+Enter Meta+Enter" disabled>Send request</button>
+				</form>
+				<div class="request-help">
+					<p id="status" role="status" aria-live="polite">No operation selected.</p>
+					<p id="send-help">Send with <kbd id="shortcut-key">Ctrl</kbd> + <kbd>Enter</kbd></p>
+				</div>
+				<p id="error" class="inline-error" role="alert" hidden></p>
+			</section>
+			<div class="workspace-toolbar">
+				<label class="namespace-toggle"><input id="hide-xmlns" type="checkbox" aria-controls="request response" aria-describedby="namespace-help" disabled /> Hide xmlns</label>
+				<p id="namespace-help">Display and copied text only. Requests are always sent with their original namespaces.</p>
+			</div>
+			<div class="workspace">
+				<section class="panel" aria-labelledby="request-heading">
+					<header class="panel-header">
+						<div class="panel-title"><h2 id="request-heading">Request</h2><span id="request-mode">Editable XML</span></div>
+						<div class="panel-actions">
+							<span id="request-copy-status" class="copy-status" role="status" aria-live="polite"></span>
+							<button id="format-request" class="button button-small" type="button" disabled>Format XML</button>
+							<button id="copy-request" class="button button-small" type="button" title="Copy request using the current xmlns visibility setting" disabled>Copy request</button>
+						</div>
+					</header>
+					<div class="editor-surface">
+						<div id="request" class="editor" aria-label="Request body"></div>
+						<div id="request-empty" class="empty-state">
+							<h3>Choose an operation</h3>
+							<p>Open an operation from the Wizdler popup to generate an editable request.</p>
+						</div>
+					</div>
+				</section>
+				<section id="response-panel" class="panel" aria-labelledby="response-heading" aria-busy="false">
+					<header class="panel-header">
+						<div class="panel-title"><h2 id="response-heading">Response</h2><span>Read-only</span></div>
+						<div class="panel-actions">
+							<div class="response-meta"><span id="response-status" class="status-badge" role="status" aria-live="polite" data-state="idle">Not sent</span><span id="elapsed-time"></span></div>
+							<span id="response-copy-status" class="copy-status" role="status" aria-live="polite"></span>
+							<button id="copy-response" class="button button-small" type="button" title="Copy response using the current xmlns visibility setting" disabled>Copy response</button>
+						</div>
+					</header>
+					<div class="editor-surface">
+						<div id="response" class="editor" aria-label="Response body, read-only"></div>
+						<div id="response-empty" class="empty-state">
+							<h3>No response yet</h3>
+							<p>Send a request to see its response body, HTTP status and elapsed time here.</p>
+						</div>
+					</div>
+				</section>
+			</div>
+		</main>
+		<footer class="app-footer">
+			<p>Review the sample values before sending your request.</p>
+			<form action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_blank" class="paypal">
+				<span>Support Wizdler</span>
+				<input type="hidden" name="cmd" value="_s-xclick" />
+				<input type="hidden" name="item_name" value="Service Tester Chrome Extension" />
+				<input type="hidden" name="hosted_button_id" value="MKTC4AH2VLWDE" />
+				<input type="image" src="images/paypal.gif" name="submit" alt="Donate to Wizdler with PayPal" />
+			</form>
+		</footer>
 	</div>
-	<div class="tabbable tabs-below">
-		<div class="tab-content">
-			<div id="request" class="tab-pane active editor"></div>
-			<div id="response" class="tab-pane editor"></div>
-		</div>
-		<ul class="nav nav-tabs">
-			<li class="active"><a href="#request">Request</a></li>
-			<li><a href="#response">Response</a></li>
-			<li id="status"></li>
-		</ul>
-	</div>
-	<form action="https://www.paypal.com/cgi-bin/webscr" method="post" target="_blank" class="paypal">
-		<input type="hidden" name="cmd" value="_s-xclick" />
-		<input type="hidden" name="item_name" value="Service Tester Chrome Extension" />
-		<input type="hidden" name="hosted_button_id" value="MKTC4AH2VLWDE" />
-		<input type="image" src="images/paypal.gif" border="0" name="submit" alt="PayPal - The safer, easier way to pay online!" />
-	</form>
 	<script src="scripts/jquery.min.js"></script>
 	<script src="scripts/ace/ace.js"></script>
 	<script src="scripts/ace/theme-vs.js"></script>
 	<script src="scripts/ace/mode-xml.js"></script>
-	<script src="scripts/bootstrap-dropdown.js"></script>
-	<script src="scripts/bootstrap-tab.js"></script>
 	<script src="scripts/vkbeautify.js"></script>
 	<script src="scripts/xmlSampleGenerator.js"></script>
 	<script src="scripts/wsdl.js"></script>

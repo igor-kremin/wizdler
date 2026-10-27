@@ -18,9 +18,11 @@ We do not collect nor send any information.
 ## Features
 
 -	View WSDL information in a comprehensible tree.
--	Download WSDL and its related XSD definitions in a single ZIP file.
--	Generate a sample SOAP request for a specified operation.
--	Edit and send the request to view the response.
+-	Download a WSDL and its external XSD schemas in a single ZIP file, including nested `xs:import`, `xs:include`, and `xs:redefine` references.
+-	Search service methods by name or description in the popup, and navigate results with the keyboard.
+-	Generate, edit, format, and send sample SOAP requests while viewing the response and HTTP status side by side.
+-	Hide `xmlns` declarations in a read-only preview and copy requests or responses as plain XML without changing the request sent to the service.
+-	Remember the namespace visibility preference between editor sessions.
 
 ## Credits
 

@@ -1,3 +1,11 @@
+1.6 (2026-10-27)
+	- Added popup method search, binding groups, and keyboard navigation.
+	- Added a responsive request/response editor with HTTP status and elapsed time.
+	- Added namespace-free previews and copy buttons for requests and responses.
+	- Remembered the Hide xmlns preference between editor sessions.
+	- Included nested XSD imports, includes, and redefines in downloaded archives.
+	- Improved file URL requests, error handling, and WSDL-only action visibility.
+
 0.0.0.13
 	- Better XML recognition (works with XML Tree extension now)
 0.0.0.12

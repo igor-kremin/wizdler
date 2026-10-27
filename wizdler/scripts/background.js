@@ -1,7 +1,22 @@
 ﻿// scripts/background.js  (MV3 service worker)
 
+function setActionEnabled(tabId, enabled) {
+  if (tabId == null) return;
+  if (enabled) {
+    chrome.action.enable(tabId);
+    chrome.action.setTitle({ tabId, title: 'Browse WSDL…' });
+  } else {
+    chrome.action.disable(tabId);
+    chrome.action.setTitle({ tabId, title: 'Wizdler: WSDL not found' });
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
-  // Можна додати ініціалізацію правил/стану тут за потреби
+  chrome.action.disable();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  chrome.action.disable();
 });
 
 // УВАГА: у MV3 слухаємо chrome.runtime.onMessage, а не chrome.extension.onRequest
@@ -10,11 +25,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   switch (command) {
     case 'showAction': {
-      // pageAction більше немає; керуємо звичайною action-кнопкою
-      if (sender.tab && sender.tab.id != null) {
-        chrome.action.enable(sender.tab.id);
-        chrome.action.setTitle({ tabId: sender.tab.id, title: 'Browse WSDL…' });
-      }
+      if (sender.tab) setActionEnabled(sender.tab.id, true);
+      sendResponse && sendResponse();
+      break;
+    }
+
+    case 'hideAction': {
+      if (sender.tab) setActionEnabled(sender.tab.id, false);
       sendResponse && sendResponse();
       break;
     }
@@ -27,23 +44,32 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         '&addr=' + encodeURIComponent(request.address) +
         '&title=' + encodeURIComponent(request.title);
 
-      chrome.tabs.create({ url }, () => sendResponse && sendResponse());
-      break;
+      chrome.tabs.create({ url }, () => {
+        const error = chrome.runtime.lastError;
+        sendResponse && sendResponse(error ? { error: error.message } : {});
+      });
+      return true;
     }
 
     case 'ajax': {
-      // У service worker MV3 краще використовувати fetch замість XHR
-      fetch(request.url, {
-        method: request.type || 'GET',
-        headers: request.headers || {},
-        body: request.data || undefined
-      })
+      const method = (request.type || request.method || 'GET').toUpperCase();
+      const headers = Object.assign({}, request.headers || {});
+      const hasContentType = Object.keys(headers).some((name) => name.toLowerCase() === 'content-type');
+      if (request.contentType && !hasContentType) {
+        headers['Content-Type'] = request.contentType;
+      }
+      const options = { method, headers };
+      if (request.data != null && method !== 'GET' && method !== 'HEAD') {
+        options.body = request.data;
+      }
+
+      fetch(request.url, options)
         .then(async (r) => {
           const text = await r.text();
           if (r.ok) {
-            sendResponse && sendResponse({ type: 'success', args: [text] });
+            sendResponse && sendResponse({ type: 'success', args: [text], status: r.status, statusText: r.statusText });
           } else {
-            sendResponse && sendResponse({ type: 'error', status: r.status, body: text });
+            sendResponse && sendResponse({ type: 'error', status: r.status, statusText: r.statusText, body: text });
           }
         })
         .catch((e) => {
